@@ -3,7 +3,7 @@ Haciendo más inteligente a una heladera. ¿Se prodrá?
 
 ## ¿Qué estas haciendo?
 
-No tengo ni la menor idea. Simplemente me aburrí de ver como hablan de las heladeras inteligentes del futuro y lo único que hacen es agregarle pantallas touch, cámaras por dentro y app's para los celular. Pero con eso solo las hacen lindas. Ahora, ¿Podrán ser inteligentes de verdad? Vamos a intentarlo, ¡puede fallar!.
+No tengo ni la menor idea. Simplemente me aburrí de ver como hablan de las (heladeras inteligentes)[https://www.youtube.com/results?search_query=heladera+inteligente] del futuro y lo único que hacen es agregarle pantallas touch, cámaras por dentro y app's para los celular. Pero con eso solo las hacen lindas. Ahora, ¿Podrán ser inteligentes de verdad? Vamos a intentarlo, ¡puede fallar!.
 
 ## Hardware
 1. [ESP8266E](https://cdn-shop.adafruit.com/datasheets/ESP8266_Specifications_English.pdf) [(NodeMCU Github)](https://github.com/nodemcu)
