@@ -13,7 +13,7 @@ No tengo ni la menor idea. Simplemente me aburrí de ver como hablan de las [hel
 5. [...]
 
 ## Firmaware
-1. Arduino corriendo sobre el ESP8266 [(Github)](https://github.com/esp8266/Arduino)
+1. Arduino corriendo sobre el ESP8266 | [Github](https://github.com/esp8266/Arduino) | [Web](https://esp8266-arduino-spanish.readthedocs.io/es/latest/index.html)
 2. [...]
 
 ## Software
