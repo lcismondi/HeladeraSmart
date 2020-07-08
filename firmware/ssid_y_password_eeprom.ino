@@ -10,8 +10,8 @@
 int addr = 0;
 int memoria = 4096;                     //Tamaño en bytes
 
-char redWifi[31] = "SSID name";      //Warning por el largo de la cadena de texto
-char pass[63] = "Password";       //Warning por el largo de la cadena de texto
+char redWifi[31] = "<SSID name>";      //Warning por el largo de la cadena de texto
+char pass[63] = "<Password>";       //Warning por el largo de la cadena de texto
 
 //SSID < 32 caracteres
 //PASS > 8 y < 64 caracteres
