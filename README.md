@@ -19,3 +19,7 @@ No tengo ni la menor idea. Simplemente me aburrí de ver como hablan de las [hel
 ## Software
 1. Google App's script ("javascript")
 2. [...]
+
+## Comunicación
+
+![Comunicacón](https://github.com/lcismondi/HeladeraSmart/blob/master/documentaci%C3%B3n/Diagrama%20de%20comunicaci%C3%B3n.svg)
