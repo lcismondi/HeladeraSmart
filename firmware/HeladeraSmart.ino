@@ -14,15 +14,20 @@
 #include "HeladeraSmart.h"
 #include <WiFiClientSecureBearSSL.h>
 
-//Variables globales************************************************************
+//*******************************************************************************
+//Variables globales ************************************************************
+//*******************************************************************************
 
 int addr = 100;
-int memoria = 4096;                     //Tamaño en bytes
+int memoria = 4096;                           //Tamaño en bytes
+unsigned long comuDB = 0;
 
+//Información guardada en memoria estática
 char redWifi[31];
 char pass[63];
 char dbLink[109];
 
+//ID de comunicación a los campos de la base de datos
 struct identificador
 {
   const String NTP = "&entry.1694967850=";    //Fecha y hora del servidor NTP
@@ -38,7 +43,9 @@ identificador id;
 
 ESP8266WiFiMulti WiFiMulti;
 
-//Inicialización****************************************************************
+//*******************************************************************************
+//Inicialización ****************************************************************
+//*******************************************************************************
 
 void setup() {
 
@@ -56,29 +63,20 @@ void setup() {
     //Se puede limitar buscando 255 como fin de cadena de texto
     addr++;
   }
-
-  Serial.print("RED: ");
-  Serial.println(redWifi);
-
+  //Contraseña red wifi
   for (int i = 0; i <= 63; i++)
   {
     pass[i] = EEPROM.read(addr);
     //Se puede limitar buscando 255 como fin de cadena de texto
     addr++;
   }
-
-  Serial.print("PASS: ");
-  Serial.println(pass);
-
+  //Conexión base de datos
   for (int i = 0; i <= 109; i++)
   {
     dbLink[i] = EEPROM.read(addr);
     //Se puede limitar buscando 255 como fin de cadena de texto
     addr++;
   }
-
-  Serial.print("LINK: ");
-  Serial.println(dbLink);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(redWifi, pass);
@@ -93,48 +91,31 @@ void setup() {
   }
   Serial.println();
 
-  //Configuración wifi
-  Serial.print("Estado: ");
-  Serial.println(EstadoWiFi[WiFi.status()]);
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-  Serial.print("PSK: ");
-  Serial.println(WiFi.psk());
-  Serial.print("RSSI:");
-  Serial.print(WiFi.RSSI());
-  Serial.println("dBm");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Autoconnect: ");
-  Serial.println(ONOFF[WiFi.getAutoConnect()]);
-  Serial.print("MAC: ");
-  Serial.println(WiFi.macAddress());
-  Serial.print("Subred: ");
-  Serial.println(WiFi.subnetMask());
-  Serial.print("Gateway: ");
-  Serial.println(WiFi.gatewayIP());
-  Serial.print("DNS 1: ");
-  Serial.println(WiFi.dnsIP(0));
-  Serial.print("DNS 2: ");
-  Serial.println(WiFi.dnsIP(1));
-  Serial.print("Hostname: ");
-  Serial.println(WiFi.hostname());
-  Serial.print("BSSID: ");
-  Serial.println(WiFi.BSSIDstr());
+
   Serial.println("");
   Serial.println("");
+
+  //El IDE de Arduino no resetea el ESP8266 al abrir el monitor serie
+  //por lo tanto puede que no se muestren las directivas del setup()
 }
 
-// the loop function runs over and over again forever
 void loop() {
+
+  //Keep alive
   digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
-  // but actually the LED is on; this is because
-  // it is active low on the ESP-01)
   delay(1000);                      // Wait for a second
   digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
 
-  if ((WiFiMulti.run() == WL_CONNECTED)) {
 
+  //*******************************************************************************
+  //Comunicación BD **********************************************************
+  //*******************************************************************************
+  
+  if ((WiFiMulti.run() == WL_CONNECTED) && millis() - comuDB >= 60000 )
+  {
+
+    comuDB = millis();
+    
     std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
 
     client->setInsecure();
@@ -176,24 +157,56 @@ void loop() {
       }
 
       https.end();
+
     } else {
       Serial.printf("[HTTPS] Unable to connect\n");
     }
   }
-  
-  Serial.print("RSSI:");
-  Serial.print(WiFi.RSSI());
-  Serial.println("dBm");
-  Serial.println("Wait 10s before next round...");
-  Serial.print("RED: ");
-  Serial.println(redWifi);
-  Serial.print("PASS: ");
-  Serial.println(pass);
-  Serial.print("LINK: ");
-  Serial.println(dbLink);
-  delay(10000);
+  else
+  {
+   Serial.println( (60000 - (millis() - comuDB))/1000 );
+    
+  }
+  //delay(10000);
 
+  //*******************************************************************************
+  //Configuración de red **********************************************************
+  //*******************************************************************************
+  if (Serial.available() > 0)
+  {
 
+    //String caca = Serial.readString();
+
+    if (Serial.readString().toInt() == 1)
+    {
+
+      Serial.println("");
+      Serial.println("CONFIGURACIÓN:");
+      Serial.println("");
+      //Datos de memoria
+      Serial.println((String)"RED: " + redWifi);
+      Serial.println((String)"PASS: " + pass);
+      Serial.println((String)"DB link: " + dbLink);
+      //Configuración wifi
+      Serial.println("Estado: " + EstadoWiFi[WiFi.status()]);
+      Serial.println("SSID: " + WiFi.SSID());
+      Serial.println("PSK: " + WiFi.psk());
+      Serial.println((String)"RSSI:" + WiFi.RSSI() + "dBm");
+      Serial.println("IP: " + WiFi.localIP());
+      Serial.println("Autoconnect: " + ONOFF[WiFi.getAutoConnect()]);
+      Serial.println("MAC: " + WiFi.macAddress());
+      Serial.println("Subred: " + WiFi.subnetMask());
+      Serial.println("Gateway: " + WiFi.gatewayIP());
+      Serial.println("DNS 1: " + WiFi.dnsIP(0));
+      Serial.println("DNS 2: " + WiFi.dnsIP(1));
+      Serial.println("Hostname: " + WiFi.hostname());
+      Serial.println("BSSID: " + WiFi.BSSIDstr());
+
+      Serial.println("");
+      Serial.println("");
+    }
+
+  }
 
 
 }
