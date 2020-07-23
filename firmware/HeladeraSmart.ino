@@ -13,6 +13,14 @@
 #include <ESP8266HTTPClient.h>
 #include "HeladeraSmart.h"
 #include <WiFiClientSecureBearSSL.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+//*******************************************************************************
+//Pinout ************************************************************************
+//*******************************************************************************
+
+const int oneWireBus = 4;//D2  
 
 //*******************************************************************************
 //Variables globales ************************************************************
@@ -21,6 +29,7 @@
 int addr = 100;
 int memoria = 4096;                           //Tamaño en bytes
 unsigned long comuDB = 0;
+float temperatura = 0;
 
 //Información guardada en memoria estática
 char redWifi[31];
@@ -42,6 +51,8 @@ struct identificador
 identificador id;
 
 ESP8266WiFiMulti WiFiMulti;
+OneWire oneWire(oneWireBus);
+DallasTemperature sensors(&oneWire);
 
 //*******************************************************************************
 //Inicialización ****************************************************************
@@ -53,6 +64,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
   EEPROM.begin(memoria);
+  sensors.begin();                            //Temperatura DS18B20
 
   //Lee datos de conexión de la memoria
   //SSID 32 < 32 caracteres
@@ -106,6 +118,10 @@ void loop() {
   delay(1000);                      // Wait for a second
   digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
 
+  sensors.requestTemperatures(); 
+  temperatura = sensors.getTempCByIndex(0);
+
+
 
   //*******************************************************************************
   //Comunicación BD **********************************************************
@@ -113,6 +129,10 @@ void loop() {
   
   if ((WiFiMulti.run() == WL_CONNECTED) && millis() - comuDB >= 60000 )
   {
+    //Si la comunicación es cada 60 segundos (1 minuto)
+    //Día   1140 registros
+    //Mes  43299 registros
+    //Año 518400 registros
 
     comuDB = millis();
     
@@ -129,10 +149,11 @@ void loop() {
                         id.VAC  + "6"   +
                         id.IAC  + "5"   +
                         id.DTY  + "0.4" +
-                        id.TEM  + "3"   +
+                        id.TEM  + temperatura   +
                         id.APE  + "2"   +
                         id.TPT  + "1"   +
                         "&submit=Submit";
+    Serial.println("Link: " + direccion);
 
     Serial.print("[HTTPS] begin...\n");
 
@@ -151,6 +172,7 @@ void loop() {
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
           String payload = https.getString();
           Serial.println(payload);
+          
         }
       } else {
         Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
@@ -164,7 +186,8 @@ void loop() {
   }
   else
   {
-   Serial.println( (60000 - (millis() - comuDB))/1000 );
+   Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB))/1000 );
+   Serial.println((String)"Temperatura: " + temperatura);
     
   }
   //delay(10000);
