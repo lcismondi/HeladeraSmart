@@ -7,14 +7,18 @@
 
 */
 
+#include "HeladeraSmart.h"
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include <ESP8266WiFi.h>
 #include <EEPROM.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
-#include "HeladeraSmart.h"
 #include <WiFiClientSecureBearSSL.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <TimeLib.h>                          //Importada manualmente de https://github.com/PaulStoffregen/Time
+
 
 //*******************************************************************************
 //Pinout ************************************************************************
@@ -28,8 +32,12 @@ const int oneWireBus = 4;//D2
 
 int addr = 100;
 int memoria = 4096;                           //Tamaño en bytes
-unsigned long comuDB = 0;
 float temperatura = 0;
+String timeNTP = "";
+String timeHW = "";
+unsigned long comuDB = 0;
+
+
 
 //Información guardada en memoria estática
 char redWifi[31];
@@ -53,6 +61,15 @@ identificador id;
 ESP8266WiFiMulti WiFiMulti;
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
+WiFiUDP ntpUDP;                               //iniciamos el cliente udp para su uso con el server NTP
+
+// cuando creamos el cliente NTP podemos especificar el servidor al que nos vamos a
+// conectar en este caso, 0.south-america.pool.ntp.org SudAmerica. También podemos
+// especificar el offset en segundos para que nos muestre la hora según nuestra zona
+// horaria, en este caso, restamos -10800 segundos ya que estoy en argentina. Y por
+// ultimo especificamos el intervalo de actualización en mili segundos, acá 6000.
+
+NTPClient timeClient(ntpUDP, "0.south-america.pool.ntp.org", -10800, 6000);
 
 //*******************************************************************************
 //Inicialización ****************************************************************
@@ -90,19 +107,24 @@ void setup() {
     addr++;
   }
 
+  //Conecta WiFi
   WiFi.mode(WIFI_STA);
   WiFi.begin(redWifi, pass);
   //WiFi.begin("nombre-red", "contraseña-red");
-
-  //Conecta WiFi
   Serial.println("Conectando");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.println(".");
   }
-  Serial.println();
-
+  
+  //Conexión con el servidor NTP
+  timeClient.begin();
+  //sometimes the NTP Client retrieves 1970. To ensure that doesn’t happen we need to
+  // force the update.
+  while (!timeClient.update()) {
+    timeClient.forceUpdate();
+  }
 
   Serial.println("");
   Serial.println("");
@@ -121,7 +143,24 @@ void loop() {
   sensors.requestTemperatures(); 
   temperatura = sensors.getTempCByIndex(0);
 
-
+  //timeClient.update();            //sincroniza con el server NTP
+  time_t t = timeClient.getEpochTime();
+  time_t h = millis();
+  timeNTP = String(month(t))  + "/"
+          + String(day(t))    + "/"
+          + String(year(t))   + "+"
+          + String(hour(t))   + ":"
+          + String(minute(t)) + ":" 
+          + String(second(t));
+  Serial.println("Son las: " + timeNTP);
+  timeHW  = String(month(h))  + "/"
+          + String(day(h))    + "/"
+          + String(year(h))   + "+"
+          + String(hour(h))   + ":"
+          + String(minute(h)) + ":" 
+          + String(second(h));
+  Serial.println("Son las: " + timeHW);
+  
 
   //*******************************************************************************
   //Comunicación BD **********************************************************
@@ -144,12 +183,12 @@ void loop() {
 
     String direccion =  String(dbLink)  +
                         "?usp=pp_url"   +
-                        id.NTP  + "8"   +
-                        id.FHW  + "7"   +
+                        id.NTP  + timeNTP     +
+                        id.FHW  + timeHW      +
                         id.VAC  + "6"   +
                         id.IAC  + "5"   +
                         id.DTY  + "0.4" +
-                        id.TEM  + temperatura   +
+                        id.TEM  + temperatura +
                         id.APE  + "2"   +
                         id.TPT  + "1"   +
                         "&submit=Submit";
