@@ -24,14 +24,21 @@
 //Pinout ************************************************************************
 //*******************************************************************************
 
-const int oneWireBus = 4;//D2  
+const int oneWireBus = 4;//D2
+const int analogInPin = A0;  // ESP8266 Analog Pin ADC0 = A0
 
 //*******************************************************************************
 //Variables globales ************************************************************
 //*******************************************************************************
 
-int addr = 100;
-int memoria = 4096;                           //Tamaño en bytes
+unsigned int addr = 100;
+const int memoria = 4096;                           //Tamaño en bytes
+unsigned int Ntemperatura = 0;
+int tension = 0;
+int Ptension = 512;
+int Mtension = 512;
+float VtensionP = 0;
+float VtensionM = 0;
 float temperatura = 0;
 String timeNTP = "";
 String timeHW = "";
@@ -79,6 +86,7 @@ void setup() {
 
   //Inicialización
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(analogInPin, INPUT);
   Serial.begin(115200);
   EEPROM.begin(memoria);
   sensors.begin();                            //Temperatura DS18B20
@@ -117,7 +125,7 @@ void setup() {
     delay(500);
     Serial.println(".");
   }
-  
+
   //Conexión con el servidor NTP
   timeClient.begin();
   //sometimes the NTP Client retrieves 1970. To ensure that doesn’t happen we need to
@@ -136,36 +144,68 @@ void setup() {
 void loop() {
 
   //Keep alive
-  digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
-  delay(1000);                      // Wait for a second
-  digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
+  //digitalWrite(LED_BUILTIN, LOW);   // Turn the LED on (Note that LOW is the voltage level
+  //delay(1000);                      // Wait for a second
+  //digitalWrite(LED_BUILTIN, HIGH);  // Turn the LED off by making the voltage HIGH
 
-  sensors.requestTemperatures(); 
-  temperatura = sensors.getTempCByIndex(0);
+
+  //*******************************************************************************
+  //Fecha *************************************************************************
+  //*******************************************************************************
 
   //timeClient.update();            //sincroniza con el server NTP
   time_t t = timeClient.getEpochTime();
   time_t h = millis();
-  timeNTP = String(month(t))  + "/"
-          + String(day(t))    + "/"
-          + String(year(t))   + "+"
-          + String(hour(t))   + ":"
-          + String(minute(t)) + ":" 
-          + String(second(t));
-  Serial.println("Son las: " + timeNTP);
-  timeHW  = String(month(h))  + "/"
-          + String(day(h))    + "/"
-          + String(year(h))   + "+"
-          + String(hour(h))   + ":"
-          + String(minute(h)) + ":" 
-          + String(second(h));
-  Serial.println("Son las: " + timeHW);
+
+  
+    timeNTP = String(month(t))  + "/"
+            + String(day(t))    + "/"
+            + String(year(t))   + "+"
+            + String(hour(t))   + ":"
+            + String(minute(t)) + ":"
+            + String(second(t));
+    //Serial.println("Son las: " + timeNTP);
+    timeHW  = String(month(h))  + "/"
+            + String(day(h))    + "/"
+            + String(year(h))   + "+"
+            + String(hour(h))   + ":"
+            + String(minute(h)) + ":"
+            + String(second(h));
+    //Serial.println("Son las: " + timeHW);
   
 
+
   //*******************************************************************************
-  //Comunicación BD **********************************************************
+  //Temperatura *******************************************************************
   //*******************************************************************************
-  
+
+    //Frena el refresh, es lento
+    sensors.requestTemperatures();
+    temperatura = + sensors.getTempCByIndex(0);
+    Ntemperatura++;
+    
+
+  //*******************************************************************************
+  //Tensión alterna 220VAC ********************************************************
+  //*******************************************************************************
+
+  tension = analogRead(analogInPin);
+
+  if (tension < Mtension)
+  {
+    Mtension = tension;
+  }
+  if (tension > Ptension)
+  {
+    Ptension = tension;
+  }
+
+
+
+  //*******************************************************************************
+  //Comunicación BD ***************************************************************
+  //*******************************************************************************
+
   if ((WiFiMulti.run() == WL_CONNECTED) && millis() - comuDB >= 60000 )
   {
     //Si la comunicación es cada 60 segundos (1 minuto)
@@ -174,7 +214,12 @@ void loop() {
     //Año 518400 registros
 
     comuDB = millis();
-    
+
+    //Conversor de tensión
+    VtensionP = map(Ptension, 377, 672, -321, 321);
+    VtensionM = map(Mtension, 377, 672, -321, 321);
+
+    //Inicia transferencia de información
     std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
 
     client->setInsecure();
@@ -185,10 +230,10 @@ void loop() {
                         "?usp=pp_url"   +
                         id.NTP  + timeNTP     +
                         id.FHW  + timeHW      +
-                        id.VAC  + "6"   +
+                        id.VAC  + (VtensionP - VtensionM) / (2 * sqrt(2))   +
                         id.IAC  + "5"   +
                         id.DTY  + "0.4" +
-                        id.TEM  + temperatura +
+                        id.TEM  + (temperatura / Ntemperatura) +
                         id.APE  + "2"   +
                         id.TPT  + "1"   +
                         "&submit=Submit";
@@ -211,6 +256,12 @@ void loop() {
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
           String payload = https.getString();
           Serial.println(payload);
+
+          //Comunicación exitosa reinicia parámetros
+          temperatura = 0;
+          Ntemperatura = 0;
+          Mtension = 512;
+          Ptension = 512;
           
         }
       } else {
@@ -225,11 +276,17 @@ void loop() {
   }
   else
   {
-   Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB))/1000 );
-   Serial.println((String)"Temperatura: " + temperatura);
+
+    //Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB)) / 1000 );
+    //Serial.println((String)"Temperatura: " + temperatura);
+    VtensionP = map(Ptension, 377, 672, -321, 321);
+    VtensionM = map(Mtension, 377, 672, -321, 321);
+    Serial.println((String)"RMS:" + (VtensionP - VtensionM) / (2 * sqrt(2)));
     
+
+
   }
-  //delay(10000);
+  //delay(1000);
 
   //*******************************************************************************
   //Configuración de red **********************************************************
