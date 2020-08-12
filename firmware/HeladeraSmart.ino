@@ -18,6 +18,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <TimeLib.h>                          //Importada manualmente de https://github.com/PaulStoffregen/Time
+#include<ADS1115_WE.h>
+#include<Wire.h>
 
 
 //*******************************************************************************
@@ -26,6 +28,7 @@
 
 const int oneWireBus = 4;//D2
 const int analogInPin = A0;  // ESP8266 Analog Pin ADC0 = A0
+#define I2C_ADDRESS 0x48
 
 //*******************************************************************************
 //Variables globales ************************************************************
@@ -34,15 +37,16 @@ const int analogInPin = A0;  // ESP8266 Analog Pin ADC0 = A0
 unsigned int addr = 100;
 const int memoria = 4096;                           //Tamaño en bytes
 unsigned int Ntemperatura = 0;
-unsigned int Ntension = 0;
+unsigned int Nmed = 0;
 float tension = 0;
-float adADC = 0;
-float rms = 0;
+float corriente = 0;
+float Vrms = 0;
+float Irms = 0;
 float temperatura = 0;
 String timeNTP = "";
 String timeHW = "";
 unsigned long comuDB = 0;
-
+unsigned long ADCtime = 0;
 
 
 //Información guardada en memoria estática
@@ -68,6 +72,9 @@ ESP8266WiFiMulti WiFiMulti;
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
 WiFiUDP ntpUDP;                               //iniciamos el cliente udp para su uso con el server NTP
+ADS1115_WE adc(I2C_ADDRESS);
+
+
 
 // cuando creamos el cliente NTP podemos especificar el servidor al que nos vamos a
 // conectar en este caso, 0.south-america.pool.ntp.org SudAmerica. También podemos
@@ -89,6 +96,18 @@ void setup() {
   Serial.begin(115200);
   EEPROM.begin(memoria);
   sensors.begin();                            //Temperatura DS18B20
+
+  //ADC
+  Wire.begin();
+  adc.init();
+  adc.setVoltageRange_mV(ADS1115_RANGE_4096);
+  adc.setCompareChannels(ADS1115_COMP_0_GND);
+  //adc.setAlertPinMode(ADS1115_DISABLE_ALERT);
+  adc.setConvRate(ADS1115_860_SPS);
+  adc.setMeasureMode(ADS1115_CONTINUOUS);
+  //adc.setAlertLatch(ADS1115_LATCH_ENABLED);
+  //adc.setAlertPol(ADS1115_ACT_LOW);
+  
 
   //Lee datos de conexión de la memoria
   //SSID 32 < 32 caracteres
@@ -180,7 +199,7 @@ void loop() {
 
   //Frena el refresh, es lento
   sensors.requestTemperatures();
-  temperatura = + sensors.getTempCByIndex(0);
+  temperatura = temperatura + sensors.getTempCByIndex(0);
   Ntemperatura++;
 
 
@@ -188,15 +207,51 @@ void loop() {
   //Tensión alterna 220VAC ********************************************************
   //*******************************************************************************
 
-  //y = 2.1794x - 1148.6
-  //y = 2,1999x - 1158,4
-  //y = 2.2010x - 1158.1
-  //y = 2,1967x - 1156,7
+  adc.setCompareChannels(ADS1115_COMP_0_GND);
 
-  adADC = 2.1967 * analogRead(analogInPin) - 1156.7;
-  tension = adADC * adADC + tension;
-  //Serial.println((String)"Medición: " + tension);
-  Ntension++;
+  Vrms = 0;
+  Nmed = 0;
+  ADCtime = millis();
+
+  while (millis() - ADCtime <= 40)
+  {
+    //=7,1213*D2-11683
+    //adc.getResult_V();
+    //adc.getRawResult();
+    tension = adc.getResult_mV();
+    Vrms = tension*tension + Vrms;
+    Nmed++;
+  }
+
+  //Serial.print("Tensión: ");
+  Serial.println(sqrt(Vrms / Nmed));
+  //Serial.print(" Muestras: ");
+  //Serial.print(Nmed);
+  //Serial.print(" Tiempo: ");
+  //Serial.println(millis()-ADCtime);
+
+  adc.setCompareChannels(ADS1115_COMP_1_GND);
+  
+  Irms = 0;
+  Nmed = 0;
+  ADCtime = millis();
+
+  while (millis() - ADCtime <= 40)
+  {
+    //=7,1213*D2-11683
+    //adc.getResult_V();
+    //adc.getRawResult();
+    corriente = adc.getResult_mV();
+    Irms = corriente*corriente + Irms;
+    Nmed++;
+  }
+
+  Serial.print("Corriente: ");
+  Serial.print(sqrt(Irms / Nmed));
+  Serial.print(" Muestras: ");
+  Serial.print(Nmed);
+  Serial.print(" Tiempo: ");
+  Serial.println(millis()-ADCtime);
 
 
 
@@ -213,10 +268,14 @@ void loop() {
 
     comuDB = millis();
 
+    //Reinicio temperatura
+    temperatura = 0;
+    Ntemperatura = 0;
+
     //Conversor de tensión
-    rms = sqrt(tension / Ntension);
-    tension = 0;
-    Ntension = 0;
+    //rms = sqrt(tension / Ntension);
+    //tension = 0;
+    //Ntension = 0;
 
     //Inicia transferencia de información
     std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
@@ -229,7 +288,7 @@ void loop() {
                         "?usp=pp_url"   +
                         id.NTP  + timeNTP +
                         id.FHW  + timeHW  +
-                        id.VAC  + rms +
+                        id.VAC  + Vrms +
                         id.IAC  + "5"   +
                         id.DTY  + "0.4" +
                         id.TEM  + (temperatura / Ntemperatura) +
@@ -255,11 +314,6 @@ void loop() {
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
           String payload = https.getString();
           Serial.println(payload);
-
-          //Comunicación exitosa reinicia parámetros
-          temperatura = 0;
-          Ntemperatura = 0;
-
         }
       } else {
         Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
@@ -275,7 +329,7 @@ void loop() {
   {
 
     //Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB)) / 1000 );
-    Serial.println((String)"Temperatura: " + temperatura);
+    //Serial.println((String)"Temperatura: " + temperatura);
     //Serial.println((String)"RMS: " + sqrt(tension / Ntension));
 
 
