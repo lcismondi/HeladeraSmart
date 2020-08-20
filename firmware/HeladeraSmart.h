@@ -4,22 +4,23 @@ const String ONOFF [] = {"OFF", "ON"};
 
 //Pinout ESP8266
 /*
-  D0   3
-  D1   1
-  D2  16
-  D3   5
-  D4   4
+  D0  16 
+  D1   5
+  D2   4
+  D3   0
+  D4   2
   D5  14
   D6  12
   D7  13
-  D8   0
-  D9   2
-  D10 15
-  D11 13
-  D12 12
-  D13 14
-  D14  4
-  D15  5
+  D8  15
+  TX   1
+  RX   3
+  CLK  6
+  SD0  7
+  SD1  8
+  SD2  9
+  SD3 10
+  CMD 11
 */
 
 //Configuración ADC1115
