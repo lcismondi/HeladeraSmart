@@ -26,7 +26,7 @@
 //Pinout ************************************************************************
 //*******************************************************************************
 
-const int oneWireBus = 4;//D2
+const int oneWireBus = 2;//D4
 const int analogInPin = A0;  // ESP8266 Analog Pin ADC0 = A0
 #define I2C_ADDRESS 0x48
 
@@ -37,7 +37,8 @@ const int analogInPin = A0;  // ESP8266 Analog Pin ADC0 = A0
 unsigned int addr = 100;
 const int memoria = 4096;                           //Tamaño en bytes
 unsigned int Ntemperatura = 0;
-unsigned int Nmed = 0;
+unsigned int Vmed = 0;
+unsigned int Imed = 0;
 float tension = 0;
 float corriente = 0;
 float Vrms = 0;
@@ -107,7 +108,7 @@ void setup() {
   adc.setMeasureMode(ADS1115_CONTINUOUS);
   //adc.setAlertLatch(ADS1115_LATCH_ENABLED);
   //adc.setAlertPol(ADS1115_ACT_LOW);
-  
+
 
   //Lee datos de conexión de la memoria
   //SSID 32 < 32 caracteres
@@ -207,10 +208,9 @@ void loop() {
   //Tensión alterna 220VAC ********************************************************
   //*******************************************************************************
 
+  //Tensión
   adc.setCompareChannels(ADS1115_COMP_0_GND);
 
-  Vrms = 0;
-  Nmed = 0;
   ADCtime = millis();
 
   while (millis() - ADCtime <= 40)
@@ -219,21 +219,20 @@ void loop() {
     //adc.getResult_V();
     //adc.getRawResult();
     tension = adc.getResult_mV();
-    Vrms = tension*tension + Vrms;
-    Nmed++;
+    Vrms = tension * tension + Vrms;
+    Vmed++;
   }
 
   //Serial.print("Tensión: ");
-  Serial.println(sqrt(Vrms / Nmed));
+  //Serial.println(sqrt(Vrms / Vmed));
   //Serial.print(" Muestras: ");
-  //Serial.print(Nmed);
+  //Serial.print(Vmed);
   //Serial.print(" Tiempo: ");
   //Serial.println(millis()-ADCtime);
 
+  //Corriente
   adc.setCompareChannels(ADS1115_COMP_1_GND);
-  
-  Irms = 0;
-  Nmed = 0;
+
   ADCtime = millis();
 
   while (millis() - ADCtime <= 40)
@@ -242,17 +241,18 @@ void loop() {
     //adc.getResult_V();
     //adc.getRawResult();
     corriente = adc.getResult_mV();
-    Irms = corriente*corriente + Irms;
-    Nmed++;
+    Irms = corriente * corriente + Irms;
+    Imed++;
   }
 
-  Serial.print("Corriente: ");
-  Serial.print(sqrt(Irms / Nmed));
-  Serial.print(" Muestras: ");
-  Serial.print(Nmed);
-  Serial.print(" Tiempo: ");
-  Serial.println(millis()-ADCtime);
-
+  /*
+    Serial.print("Corriente: ");
+    Serial.print(sqrt(Irms / Imed));
+    Serial.print(" Muestras: ");
+    Serial.print(Imed);
+    Serial.print(" Tiempo: ");
+    Serial.println(millis() - ADCtime);
+  */
 
 
   //*******************************************************************************
@@ -268,15 +268,6 @@ void loop() {
 
     comuDB = millis();
 
-    //Reinicio temperatura
-    temperatura = 0;
-    Ntemperatura = 0;
-
-    //Conversor de tensión
-    //rms = sqrt(tension / Ntension);
-    //tension = 0;
-    //Ntension = 0;
-
     //Inicia transferencia de información
     std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
 
@@ -288,8 +279,8 @@ void loop() {
                         "?usp=pp_url"   +
                         id.NTP  + timeNTP +
                         id.FHW  + timeHW  +
-                        id.VAC  + Vrms +
-                        id.IAC  + "5"   +
+                        id.VAC  + sqrt(Vrms / Vmed) +
+                        id.IAC  + sqrt(Irms / Imed) +
                         id.DTY  + "0.4" +
                         id.TEM  + (temperatura / Ntemperatura) +
                         id.APE  + "2"   +
@@ -319,6 +310,18 @@ void loop() {
         Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
       }
 
+
+      //Reinicio temperatura
+      temperatura = 0;
+      Ntemperatura = 0;
+
+      //Conversor de tensión y corriente
+      Vrms = 0;
+      Vmed = 0;
+      Irms = 0;
+      Imed = 0;
+
+
       https.end();
 
     } else {
@@ -328,9 +331,9 @@ void loop() {
   else
   {
 
-    //Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB)) / 1000 );
-    //Serial.println((String)"Temperatura: " + temperatura);
-    //Serial.println((String)"RMS: " + sqrt(tension / Ntension));
+    Serial.println((String)"Tiempo restante: " + (60000 - (millis() - comuDB)) / 1000 );
+    Serial.println((String)"Temperatura: " + temperatura / Ntemperatura);
+    //Serial.println((String)"RMS: " + sqrt(Vrms / Vmed));
 
 
 
